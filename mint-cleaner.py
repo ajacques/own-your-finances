@@ -29,14 +29,24 @@ for name in glob.glob('/data/mint-balances/*.csv'):
 actual_balances = pd.concat(dfs, axis=0, ignore_index=True)
 current_balance = actual_balances.sort_values(by='Date', ascending=False).groupby('Account Name').first().drop(columns=['Date'])
 
-def render_bal_chart(acc_name, acc_name2):
+def render_bal_chart(acc_name: str):
+    """
+    Renders a chart showing the estimated balance and the correct balance for a single account.
+    
+    :param str acc_name: The account name as listed in the transactions.csv and the mint-balances CSV files
+    """
     fig, (ax, ax2) = plt.subplots(2, figsize=(20, 20))
     ax.title.set_text(f'Difference in expected vs actual: {acc_name}')
     ax.xaxis.set_label('Date')
 
-    applicable_transactions = transactions[transactions['Account Name'] == acc_name2]
+    applicable_transactions = transactions[transactions['Account Name'] == acc_name]
+    if len(applicable_transactions) == 0:
+        raise Exception(f"Didn't find any transactions that matched acc_name={acc_name}. Pick one of: {transactions['Account Name'].unique()}")
     
     actual_calc = actual_balances[actual_balances['Account Name'] == acc_name].set_index('Date')
+    if len(actual_calc) == 0:
+        raise Exception(f"Didn't find any balances that matched acc_name={acc_name}. Pick one of: {actual_balances['Account Name'].unique()}")
+    
     actual_calc['Change'] = actual_calc['Amount'].diff()
     actual = actual_calc[actual_calc['Change'] != 0]
     estimated = applicable_transactions.groupby(['Date'])['AbsoluteAmount'].sum().cumsum()
