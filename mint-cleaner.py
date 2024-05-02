@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import glob
 
 
-transactions = pd.read_csv(f"/data/transactions.csv", parse_dates=['Date'], encoding='utf8').sort_values('Date').reset_index()
+transactions = pd.read_csv(f"transactions.csv", parse_dates=['Date'], encoding='utf8').sort_values('Date').reset_index()
 transactions['Id'] = transactions.index
 
 # Map the Account Name column to the right Firefly account id
