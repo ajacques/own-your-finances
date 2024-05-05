@@ -94,13 +94,13 @@ def find_transfer(row, df, time_window_days=5):
         
         # Find possible descriptions based on this row's
         # account id
-        if isinstance(value, list) and row['AccountId'] in value:
+        if (isinstance(value, list) and row['AccountId'] in value) or value == row['AccountId']:
             inverted_by_account_id_in_description.append(df['Original Description'].str.contains(key, case=False))
         
     if len(match_by_description) > 0:
         opposing_filter = attempt(df, opposing_filter, df['AccountId'].isin(match_by_description))
     if len(inverted_by_account_id_in_description) > 0:
-        filter_by_invert = reduce(lambda x, y: x & y, inverted_by_account_id_in_description)
+        filter_by_invert = reduce(lambda x, y: x | y, inverted_by_account_id_in_description)
         opposing_filter = attempt(df, opposing_filter, filter_by_invert)
     
     transfer_pair = df[opposing_filter]    
@@ -116,72 +116,73 @@ def process_record(row, df):
     if df.at[row.name, 'Considered']:
         return None
     
-    pair = find_transfer(row, df)
-    if pair is not None:
-        df.at[pair.name, 'Considered'] = True
-        notes = [
-            row['Notes'],
-            pair['Notes'],
-        ]
-        labels = list(filter(lambda x: isinstance(x, str) and x != '', [
-            row['Labels'],
-            pair['Labels']
-        ]))
-        if row['Transaction Type'] == 'debit':
-            # Bank is on the left
-            date = row['Date']
-            process_date = pair['Date']
-            notes.append(pair['Original Description'])
-            return {
-                'type': 'transfer',
-                'date': row['Date'],
-                'process_date': pair['Date'],
-                'amount': row['Amount'],
-                'category': pair['Category'],
-                'description': row['Original Description'],
-                'source_id': row['AccountId'],
-                'destination_id': pair['AccountId'],
-                'tags': labels,
-                'format': 'transfer_debit',
-                'notes': '\n'.join(filter(lambda x: isinstance(x, str) and x != '', notes))
-            }
+    if df_filter_relevant.loc[row.name]:
+        pair = find_transfer(row, df)
+        if pair is not None:
+            df.at[pair.name, 'Considered'] = True
+            notes = [
+                row['Notes'],
+                pair['Notes'],
+            ]
+            labels = list(filter(lambda x: isinstance(x, str) and x != '', [
+                row['Labels'],
+                pair['Labels']
+            ]))
+            if row['Transaction Type'] == 'debit':
+                # Bank is on the left
+                date = row['Date']
+                process_date = pair['Date']
+                notes.append(pair['Original Description'])
+                return {
+                    'type': 'transfer',
+                    'date': row['Date'],
+                    'process_date': pair['Date'],
+                    'amount': row['Amount'],
+                    'category': pair['Category'],
+                    'description': row['Original Description'],
+                    'source_id': row['AccountId'],
+                    'destination_id': pair['AccountId'],
+                    'tags': labels,
+                    'format': 'transfer_debit',
+                    'notes': '\n'.join(filter(lambda x: isinstance(x, str) and x != '', notes))
+                }
+            else:
+                date = pair['Date']
+                process_date = row['Date']
+                notes.append(row['Original Description'])
+                return {
+                    'type': 'transfer',
+                    'date': date,
+                    'process_date': process_date,
+                    'amount': row['Amount'],
+                    'category': pair['Category'],
+                    'description': pair['Original Description'],
+                    'source_id': pair['AccountId'],
+                    'destination_id': row['AccountId'],
+                    'tags': labels,
+                    'format': 'transfer_credit',
+                    'notes': '\n'.join(filter(lambda x: isinstance(x, str) and x != '', notes))
+                }
+        
+        result = {
+            'date': row['Date'],
+            'description': row['Original Description'],
+            'amount': row['Amount'],
+            'category': row['Category'],
+            'tags': row['Labels'],
+            'notes': row['Notes']
+        }
+        
+        if row['Transaction Type'] == 'credit':
+            result['type'] = 'deposit'
+            result['destination_id'] = row['AccountId']
+            result['source_name'] = row['Description']
         else:
-            date = pair['Date']
-            process_date = row['Date']
-            notes.append(row['Original Description'])
-            return {
-                'type': 'transfer',
-                'date': date,
-                'process_date': process_date,
-                'amount': row['Amount'],
-                'category': pair['Category'],
-                'description': pair['Original Description'],
-                'source_id': pair['AccountId'],
-                'destination_id': row['AccountId'],
-                'tags': labels,
-                'format': 'transfer_credit',
-                'notes': '\n'.join(filter(lambda x: isinstance(x, str) and x != '', notes))
-            }
-    
-    result = {
-        'date': row['Date'],
-        'description': row['Original Description'],
-        'amount': row['Amount'],
-        'category': row['Category'],
-        'tags': row['Labels'],
-        'notes': row['Notes']
-    }
-    
-    if row['Transaction Type'] == 'credit':
-        result['type'] = 'deposit'
-        result['destination_id'] = row['AccountId']
-        result['source_name'] = row['Description']
-    else:
-        result['source_id'] = row['AccountId']
-        result['destination_name'] = row['Description']
-        result['type'] = 'withdrawal'
-            
-    return result
+            result['source_id'] = row['AccountId']
+            result['destination_name'] = row['Description']
+            result['type'] = 'withdrawal'
+                
+        return result
 
 transactions['Considered'] = False
 
