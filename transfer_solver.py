@@ -82,6 +82,7 @@ def find_transfer(row, df, time_window_days=5):
 
     match_by_description = set()
     inverted_by_account_id_in_description = []
+    not_inverted = []
     for key, value in known_account_ids.items():
         # If we find an account id in this record's description
         # then refine the other side by the found account id(s)
@@ -94,13 +95,17 @@ def find_transfer(row, df, time_window_days=5):
         
         # Find possible descriptions based on this row's
         # account id
-        if (isinstance(value, list) and row['AccountId'] in value) or value == row['AccountId']:
+        if (isinstance(value, list) and row['AccountId'] in value) or (isinstance(value, int) and value == row['AccountId']):
             inverted_by_account_id_in_description.append(df['Original Description'].str.contains(key, case=False))
+        else:
+            not_inverted.append(~df['Original Description'].str.contains(key, case=False))
         
     if len(match_by_description) > 0:
         opposing_filter = attempt(df, opposing_filter, df['AccountId'].isin(match_by_description))
     if len(inverted_by_account_id_in_description) > 0:
         filter_by_invert = reduce(lambda x, y: x | y, inverted_by_account_id_in_description)
+        if len(not_inverted) > 0:
+            filter_by_invert = filter_by_invert & reduce(lambda x, y: x & y, not_inverted)
         opposing_filter = attempt(df, opposing_filter, filter_by_invert)
     
     transfer_pair = df[opposing_filter]    
