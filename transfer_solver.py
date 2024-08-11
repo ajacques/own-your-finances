@@ -60,6 +60,27 @@ not_a_transfer = [
 
 df_filter_relevant = ~reduce(lambda x, y: x | y, not_a_transfer)
 
+# Build a cache of transactions matching certain descriptions. Speeds up transfer identification below
+known_account_ids_cached = {}
+descr_cached = {}
+
+for key, value in known_account_ids.items():
+    series = transactions['Original Description'].str.contains(key)
+    
+    if isinstance(value, list):
+        descr_cached[key] = transactions['AccountId'].isin(value)
+        for id in value:
+            if id in known_account_ids_cached:
+                known_account_ids_cached[id] = known_account_ids_cached[id] | series
+            else:
+                known_account_ids_cached[id] = series
+    else:
+        descr_cached[key] = transactions['AccountId'] == value
+        if value in known_account_ids_cached:
+            known_account_ids_cached[value] = known_account_ids_cached[value] | series
+        else:
+            known_account_ids_cached[value] = series
+
 def attempt(df, base, attempt):
     if len(df[base & attempt]) > 0:
         return base & attempt
@@ -96,17 +117,18 @@ def find_transfer(row, df, time_window_days=5):
         # Find possible descriptions based on this row's
         # account id
         if (isinstance(value, list) and row['AccountId'] in value) or (isinstance(value, int) and value == row['AccountId']):
-            inverted_by_account_id_in_description.append(df['Original Description'].str.contains(key, case=False))
+            pass
         else:
-            not_inverted.append(~df['Original Description'].str.contains(key, case=False))
+            not_inverted.append(~descr_cached[key])
         
     if len(match_by_description) > 0:
         opposing_filter = attempt(df, opposing_filter, df['AccountId'].isin(match_by_description))
-    if len(inverted_by_account_id_in_description) > 0:
-        filter_by_invert = reduce(lambda x, y: x | y, inverted_by_account_id_in_description)
+
+    if row['AccountId'] in known_account_ids_cached:
+        filter_by_invert = known_account_ids_cached[row['AccountId']]
         if len(not_inverted) > 0:
             filter_by_invert = filter_by_invert & reduce(lambda x, y: x & y, not_inverted)
-        opposing_filter = attempt(df, opposing_filter, filter_by_invert)
+        opposing_filter, success = attempt(df, opposing_filter, filter_by_invert)
     
     transfer_pair = df[opposing_filter]    
     if not transfer_pair.empty:
