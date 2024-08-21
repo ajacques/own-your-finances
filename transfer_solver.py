@@ -138,6 +138,8 @@ def find_transfer(row, df, time_window_days=5):
     else:
         return None
 
+def filter_for_non_empty(inputD):
+    return set(filter(lambda x: isinstance(x, str) and x != '', inputD))
 
 def process_record(row, df):
     if df.at[row.name, 'Considered']:
@@ -151,9 +153,13 @@ def process_record(row, df):
                 row['Notes'],
                 pair['Notes'],
             ]
-            labels = list(filter(lambda x: isinstance(x, str) and x != '', [
+            labels = filter_for_non_empty([
                 row['Labels'],
                 pair['Labels']
+            ])
+            category = ''.join(filter_for_non_empty([
+                row['Category'],
+                pair['Category']
             ]))
             if row['Transaction Type'] == 'debit':
                 # Bank is on the left
@@ -165,7 +171,7 @@ def process_record(row, df):
                     'date': row['Date'],
                     'process_date': pair['Date'],
                     'amount': row['Amount'],
-                    'category': pair['Category'],
+                    'category_name': category,
                     'description': row['Original Description'],
                     'source_id': row['AccountId'],
                     'destination_id': pair['AccountId'],
@@ -182,7 +188,7 @@ def process_record(row, df):
                     'date': date,
                     'process_date': process_date,
                     'amount': row['Amount'],
-                    'category': pair['Category'],
+                    'category_name': category,
                     'description': pair['Original Description'],
                     'source_id': pair['AccountId'],
                     'destination_id': row['AccountId'],
